@@ -1,0 +1,11 @@
+[Interface]
+Address = %CLIENTIP%/32
+PrivateKey = %PRIVKEY%
+DNS = 8.8.8.8
+
+[Peer]
+PublicKey = %SRVPUBKEY%
+Endpoint = %SRVENDPOINT%:%SRVPORT%
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 30
+

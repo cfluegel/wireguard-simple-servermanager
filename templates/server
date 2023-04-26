@@ -1,0 +1,12 @@
+[Interface]
+Address = %SRVNETWORK%
+PostUp = iptables -t nat -A POSTROUTING -s %SRVNETWORK% -o eth0 -j MASQUERADE
+PostUp = iptables -A FORWARD -i eth0 -o %SRVINT% -j ACCEPT
+PostUp = iptables -A FORWARD -i %SRVINT% -o eth0 -j ACCEPT
+PostUp = iptables -A FORWARD -i %SRVINT% -o %SRVINT% -j ACCEPT
+PostDown = iptables -F FORWARD
+PostDown = iptables -t nat -F POSTROUTING
+ListenPort = %SRVPORT%
+PrivateKey = %SRVPRIVKEY%
+
+
