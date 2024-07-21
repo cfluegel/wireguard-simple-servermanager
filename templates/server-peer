@@ -1,6 +1,6 @@
 # %CLIENTNAME%
 [Peer]
 PublicKey = %CLIENTPUBKEY%
-AllowedIPs = %CLIENTIP%/32
+AllowedIPs = %CLIENTIP%/32%CLIENTNETWORKS%
 PersistentKeepalive = 30
 

@@ -38,12 +38,15 @@ cat server.txt|while read line ; do
     CIP=$(echo $line | awk -F";" '{ print $1 }')
     CNAME=$(echo $line | awk -F";" '{ print $2 }')
     CPRIVKEY=$(echo $line | awk -F";" '{ print $3 }')
+    CNETWORK="$(echo $line | awk -F";" '{ print $4 }')"
+    [ ${#CNETWORK} -gt 0 ] && CNETWORK=",${CNETWORK}"
     CPUBKEY=$(echo $CPRIVKEY | wg pubkey)
 
     cat templates/server-peer | \
 	    sed "s|%CLIENTPUBKEY%|$CPUBKEY|" | \
 	    sed "s|%CLIENTNAME%|$CNAME|" | \
-	    sed "s|%CLIENTIP%|$CIP|" >> configs/$SNAME.server.conf
+	    sed "s|%CLIENTIP%|$CIP|" | \
+	    sed "s|%CLIENTNETWORKS%|$CNETWORK|" >> configs/$SNAME.server.conf
   done
   unset CIP
   unset CNAME
