@@ -6,6 +6,5 @@ DNS = 8.8.8.8
 [Peer]
 PublicKey = %SRVPUBKEY%
 Endpoint = %SRVENDPOINT%:%SRVPORT%
-AllowedIPs = 0.0.0.0/0
+AllowedIPs = %CLIENTALLOWEDIPS%
 PersistentKeepalive = 30
-

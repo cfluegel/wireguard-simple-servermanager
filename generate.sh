@@ -16,18 +16,18 @@
 #
 # Eingabedateien (Semikolon-getrennt)
 # - `server.txt` (eine Zeile pro Server):
-#     NAME;ENDPOINT;INTERFACE;NETWORK/CIDR;PORT;SERVER_PRIVATE_KEY
+#     NAME;ENDPOINT;INTERFACE;SERVER_ADDRESS/CIDR;NETWORK/CIDR;PORT;SERVER_PRIVATE_KEY;DEFAULT_TUNNEL_MODE
 #   Beispiel:
-#     wg-eu;vpn.example.com;wg0;10.0.0.1/24;51820;ABCDEF...=
+#     wg-eu;vpn.example.com;wg0;10.0.0.1/24;10.0.0.0/24;51820;ABCDEF...=;split
 #
 # - `clients.txt` (eine Zeile pro Client):
-#     CLIENT_IP/CIDR;CLIENT_NAME;CLIENT_PRIVATE_KEY;OPTIONALE_NETZE
+#     CLIENT_IP/CIDR;CLIENT_NAME;CLIENT_PRIVATE_KEY;OPTIONALE_NETZE;TUNNEL_MODE
 #   Hinweise:
 #     - Das Feld `OPTIONALE_NETZE` ist optional; mehrere Netze können komma-separiert
 #       angegeben werden (z. B. 192.168.0.0/16,172.16.0.0/12). Diese werden zu AllowedIPs
 #       auf Serverseite ergänzt.
 #   Beispiel:
-#     10.0.0.2/32;alice;ABCDEF...=;192.168.0.0/16
+#     10.0.0.2/32;alice;ABCDEF...=;192.168.0.0/16;split
 #
 # Ausgabe
 # - Alle generierten Dateien werden unter `configs/` abgelegt.
@@ -73,6 +73,7 @@ cat server.txt | while read line ; do
   SNETWORK=$(echo $line | awk -F";" '{ print $5 }')
   SPORT=$(echo $line | awk -F";" '{ print $6 }')
   SPRIVKEY=$(echo $line | awk -F";" '{ print $7 }')
+  SDEFAULTMODE=$(echo $line | awk -F";" '{ print $8 }')
   SPUBKEY=$(echo $SPRIVKEY | wg pubkey)
 
   [ -e "configs/$SNAME/" ] || mkdir configs/$SNAME/
@@ -112,6 +113,16 @@ cat server.txt | while read line ; do
     CIP=$(echo $line | awk -F";" '{ print $1 }')
     CNAME=$(echo $line | awk -F";" '{ print $2 }')
     CPRIVKEY=$(echo $line | awk -F";" '{ print $3 }')
+    CNETWORK="$(echo $line | awk -F";" '{ print $4 }')"
+    CMODE=$(echo $line | awk -F";" '{ print $5 }')
+    MODE=$(echo "${CMODE:-$SDEFAULTMODE}" | tr 'A-Z' 'a-z')
+    [ -z "$MODE" ] && MODE="split"
+    if [ "$MODE" = "full" ]; then
+      CALLOWEDIPS="0.0.0.0/0"
+    else
+      # Client AllowedIPs are based on server network only; OPTIONAL_NETWORKS are server-side only.
+      CALLOWEDIPS="$SNETWORK"
+    fi
     echo "Generate Client Configuration for $CNAME"
 
     # Clientbasis aus Vorlage einfügen
@@ -120,7 +131,8 @@ cat server.txt | while read line ; do
 	    sed "s|%SRVENDPOINT%|$SEXTENDPOINT|" | \
 	    sed "s|%SRVPUBKEY%|$SPUBKEY|" | \
 	    sed "s|%SRVPORT%|$SPORT|" | \
-	    sed "s|%CLIENTIP%|$CIP|" > configs/$SNAME/$CNAME.client.conf
+	    sed "s|%CLIENTIP%|$CIP|" | \
+	    sed "s|%CLIENTALLOWEDIPS%|$CALLOWEDIPS|" > configs/$SNAME/$CNAME.client.conf
 
   done
 done

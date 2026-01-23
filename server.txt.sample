@@ -1,1 +1,1 @@
-servername;wireguard.example.org;wg0;1.1.1.1/24;1.1.1.0/24;51820;server_privkey;
+servername;wireguard.example.org;wg0;1.1.1.1/24;1.1.1.0/24;51820;server_privkey;split
