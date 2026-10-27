@@ -1,3 +1,11 @@
 MEMORY.md
 server.txt
 clients.txt
+# Backups, die wg-manager.py vor jedem Schreiben anlegt (enthalten Private Keys)
+*.bak
+# generierte Konfigurationen (enthalten Private Keys)
+configs/
+__pycache__/
+*.pyc
+# vorbereitete Commit-Message, nur lokal
+.commit-msg.txt

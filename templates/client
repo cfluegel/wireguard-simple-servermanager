@@ -1,7 +1,7 @@
 [Interface]
 Address = %CLIENTIP%/32
 PrivateKey = %PRIVKEY%
-DNS = 8.8.8.8
+DNS = %CLIENTDNS%
 
 [Peer]
 PublicKey = %SRVPUBKEY%

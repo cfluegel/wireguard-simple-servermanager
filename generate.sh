@@ -16,18 +16,31 @@
 #
 # Eingabedateien (Semikolon-getrennt)
 # - `server.txt` (eine Zeile pro Server):
-#     NAME;ENDPOINT;INTERFACE;SERVER_ADDRESS/CIDR;NETWORK/CIDR;PORT;SERVER_PRIVATE_KEY;DEFAULT_TUNNEL_MODE
+#     NAME;ENDPOINT;INTERFACE;SERVER_ADDRESS/CIDR;NETWORK/CIDR;PORT;SERVER_PRIVATE_KEY;DEFAULT_TUNNEL_MODE;DNS
+#   Hinweise:
+#     - Das Feld `DNS` ist optional und setzt den Standard-DNS-Server für alle
+#       Clients dieses Servers (Fallback: 8.8.8.8).
 #   Beispiel:
-#     wg-eu;vpn.example.com;wg0;10.0.0.1/24;10.0.0.0/24;51820;ABCDEF...=;split
+#     wg-eu;vpn.example.com;wg0;10.0.0.1/24;10.0.0.0/24;51820;ABCDEF...=;split;10.0.0.1
 #
 # - `clients.txt` (eine Zeile pro Client):
-#     CLIENT_IP/CIDR;CLIENT_NAME;CLIENT_PRIVATE_KEY;OPTIONALE_NETZE;TUNNEL_MODE
+#     CLIENT_IP;CLIENT_NAME;CLIENT_PRIVATE_KEY;OPTIONALE_NETZE;TUNNEL_MODE;DNS;SERVER
 #   Hinweise:
+#     - `CLIENT_IP` ist eine einzelne Adresse OHNE Praefix (z. B. 10.0.0.2). Die Vorlagen
+#       `templates/client` und `templates/server-peer` haengen `/32` selbst an.
 #     - Das Feld `OPTIONALE_NETZE` ist optional; mehrere Netze können komma-separiert
 #       angegeben werden (z. B. 192.168.0.0/16,172.16.0.0/12). Diese werden zu AllowedIPs
 #       auf Serverseite ergänzt.
+#     - Das Feld `DNS` ist optional und überschreibt den DNS-Server aus `server.txt`
+#       für diesen Client (Fallback: DNS aus server.txt, sonst 8.8.8.8).
+#     - Das Feld `SERVER` ist optional und ordnet den Client einem Server aus `server.txt`
+#       zu. Ist es leer, gilt der Client wie bisher für *alle* Server.
+#       (Dieselbe Regel setzt `wg-manager.py` in `clients_for()` um.)
 #   Beispiel:
-#     10.0.0.2/32;alice;ABCDEF...=;192.168.0.0/16;split
+#     10.0.0.2;alice;ABCDEF...=;192.168.0.0/16;split;9.9.9.9;wg-eu
+#
+# - In beiden Eingabedateien werden Leerzeilen und mit `#` beginnende Kommentarzeilen
+#   ignoriert.
 #
 # Ausgabe
 # - Alle generierten Dateien werden unter `configs/` abgelegt.
@@ -63,9 +76,17 @@
 [ -e "clients.txt" ] || exit 2
 [ -e "server.txt" ] || exit 2
 
+# Leerzeilen und Kommentarzeilen (beginnend mit #) sollen ignoriert werden
+is_skippable() {
+  [ -z "$(echo "$1" | tr -d '[:space:]')" ] && return 0
+  case "$1" in \#*) return 0 ;; esac
+  return 1
+}
+
 
 # Serverkonfiguration(en) generieren (eine pro Zeile in server.txt)
 cat server.txt | while read line ; do
+  is_skippable "$line" && continue
   SNAME=$(echo $line | awk -F";" '{ print $1 }')
   SEXTENDPOINT=$(echo $line | awk -F";" '{ print $2 }')
   SINT=$(echo $line | awk -F";" '{ print $3 }')
@@ -74,6 +95,7 @@ cat server.txt | while read line ; do
   SPORT=$(echo $line | awk -F";" '{ print $6 }')
   SPRIVKEY=$(echo $line | awk -F";" '{ print $7 }')
   SDEFAULTMODE=$(echo $line | awk -F";" '{ print $8 }')
+  SDNS=$(echo $line | awk -F";" '{ print $9 }')
   SPUBKEY=$(echo $SPRIVKEY | wg pubkey)
 
   [ -e "configs/$SNAME/" ] || mkdir configs/$SNAME/
@@ -90,6 +112,10 @@ cat server.txt | while read line ; do
 
   # Für jeden Client einen Peer-Block in die Serverkonfiguration anhängen
   cat clients.txt | while read line ; do
+    is_skippable "$line" && continue
+    # Server-Zuordnung: leeres Feld bedeutet "gilt für alle Server"
+    CSERVER=$(echo $line | awk -F";" '{ print $7 }')
+    [ -n "$CSERVER" ] && [ "$CSERVER" != "$SNAME" ] && continue
     CIP=$(echo $line | awk -F";" '{ print $1 }')
     CNAME=$(echo $line | awk -F";" '{ print $2 }')
     CPRIVKEY=$(echo $line | awk -F";" '{ print $3 }')
@@ -110,11 +136,18 @@ cat server.txt | while read line ; do
   echo ""
   # Clientkonfigurationen generieren (eine Datei pro Client)
   cat clients.txt | while read line ; do
+    is_skippable "$line" && continue
+    # Server-Zuordnung: leeres Feld bedeutet "gilt für alle Server"
+    CSERVER=$(echo $line | awk -F";" '{ print $7 }')
+    [ -n "$CSERVER" ] && [ "$CSERVER" != "$SNAME" ] && continue
     CIP=$(echo $line | awk -F";" '{ print $1 }')
     CNAME=$(echo $line | awk -F";" '{ print $2 }')
     CPRIVKEY=$(echo $line | awk -F";" '{ print $3 }')
     CNETWORK="$(echo $line | awk -F";" '{ print $4 }')"
     CMODE=$(echo $line | awk -F";" '{ print $5 }')
+    CDNS=$(echo $line | awk -F";" '{ print $6 }')
+    CDNS="${CDNS:-$SDNS}"
+    [ -z "$CDNS" ] && CDNS="8.8.8.8"
     MODE=$(echo "${CMODE:-$SDEFAULTMODE}" | tr 'A-Z' 'a-z')
     [ -z "$MODE" ] && MODE="split"
     if [ "$MODE" = "full" ]; then
@@ -132,6 +165,7 @@ cat server.txt | while read line ; do
 	    sed "s|%SRVPUBKEY%|$SPUBKEY|" | \
 	    sed "s|%SRVPORT%|$SPORT|" | \
 	    sed "s|%CLIENTIP%|$CIP|" | \
+	    sed "s|%CLIENTDNS%|$CDNS|" | \
 	    sed "s|%CLIENTALLOWEDIPS%|$CALLOWEDIPS|" > configs/$SNAME/$CNAME.client.conf
 
   done
